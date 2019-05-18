@@ -18,6 +18,27 @@ const getRelativePrefix = (path) => {
     return relativePrefix;
 };
 
+const absolutizeRssFiles = async (siteUrl) => {
+    // Replaces all /__GATSBY_IPFS_PATH_PREFIX__/ strings with the correct
+    // absolute urls
+    const paths = await globby(['public/**/rss.xml']);
+
+    await pMap(paths, async (path) => {
+        const buffer = await readFileAsync(path);
+        let contents = buffer.toString();
+
+        // Skip if there's nothing to do
+        if (!contents.includes('__GATSBY_IPFS_PATH_PREFIX__')) {
+            return;
+        }
+
+        contents = contents
+        .replace(/\/__GATSBY_IPFS_PATH_PREFIX__\//g, `${siteUrl}/`);
+
+        await writeFileAsync(path, contents);
+    }, { concurrency: TRANSFORM_CONCURRENCY });
+};
+
 const relativizeHtmlFiles = async () => {
     // Replaces all /__GATSBY_IPFS_PATH_PREFIX__/ strings with the correct relative paths
     // based on the depth of the file within the `public/` folder
@@ -71,7 +92,12 @@ const relativizeJsFiles = async () => {
 
 const relativizeMiscAssetFiles = async () => {
     // Replaces all /__GATSBY_IPFS_PATH_PREFIX__/ strings to standard relative paths
-    const paths = await globby(['public/**/*', '!public/**/*.html', '!public/**/*.js']);
+    const paths = await globby([
+        'public/**/*',
+        '!public/**/*.html',
+        '!public/**/*.js',
+        '!public/rss.xml',
+    ]);
 
     await pMap(paths, async (path) => {
         // Skip if this is not a text file
@@ -127,7 +153,13 @@ exports.onPreBootstrap = ({ store, reporter }) => {
     }
 };
 
-exports.onPostBuild = async () => {
+exports.onPostBuild = async ({ store }) => {
+    const { config } = store.getState();
+    const siteUrl = config.siteMetadata.siteUrl;
+
+    // HACK to work around https://github.com/gatsbyjs/gatsby/issues/14133
+    await absolutizeRssFiles(siteUrl);
+
     // Relativize all occurrences of __GATSBY_IPFS_PATH_PREFIX__ within the built files
     await relativizeHtmlFiles();
     await relativizeJsFiles();
