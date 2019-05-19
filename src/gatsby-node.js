@@ -97,6 +97,7 @@ const relativizeMiscAssetFiles = async () => {
         '!public/**/*.html',
         '!public/**/*.js',
         '!public/rss.xml',
+        '!public/**/*.json'
     ]);
 
     await pMap(paths, async (path) => {
